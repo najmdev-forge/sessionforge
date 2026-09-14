@@ -1,0 +1,46 @@
+name: repo-safety-check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  repo-safety-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: No local only paths in diff
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed=$(git diff --name-only "$base" "$head")
+          echo "$changed"
+          if echo "$changed" | grep -E '(^|/)local/'; then
+            echo "Files under a local/ directory must not be committed."
+            exit 1
+          fi
+          if echo "$changed" | grep '\.local\.'; then
+            echo "Files with .local. in the name must not be committed."
+            exit 1
+          fi
+
+      - name: CLAUDE.md must not be tracked
+        run: |
+          if git ls-files | grep -x 'CLAUDE.md'; then
+            echo "CLAUDE.md must stay untracked, see .git/info/exclude."
+            exit 1
+          fi
+
+      - name: Simple secret pattern scan
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          pattern='BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|-----BEGIN CERTIFICATE-----'
+          if git diff "$base" "$head" | grep -inE "$pattern"; then
+            echo "Possible secret pattern found in the diff, review before merging."
+            exit 1
+          fi
