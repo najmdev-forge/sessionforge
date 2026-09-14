@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
 jobs:
   repo-safety-check:
     runs-on: ubuntu-latest
@@ -13,27 +17,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: No local only paths in diff
+      - name: Run repository safety checks
         run: |
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          changed=$(git diff --name-only "$base" "$head")
-          echo "$changed"
-          if echo "$changed" | grep -E '(^|/)local/'; then
-            echo "Files under a local/ directory must not be committed."
-            exit 1
-          fi
-          if echo "$changed" | grep '\.local\.'; then
-            echo "Files with .local. in the name must not be committed."
-            exit 1
-          fi
+          .github/scripts/repo_safety_check.sh \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"
 
-      - name: Simple secret pattern scan
+      - name: Download gitleaks
         run: |
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          pattern='BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|-----BEGIN CERTIFICATE-----'
-          if git diff "$base" "$head" -- . ':(exclude).github/workflows/' | grep -inE "$pattern"; then
-            echo "Possible secret pattern found in the diff, review before merging."
-            exit 1
-          fi
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "${GITLEAKS_SHA256}  $archive" | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          chmod +x gitleaks
+
+      - name: Scan diff for secrets with gitleaks
+        run: |
+          ./gitleaks git \
+            --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            -v
