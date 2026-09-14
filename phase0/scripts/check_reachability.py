@@ -43,7 +43,7 @@ def check_appium_status(host: str, port: int, path: str) -> bool:
             print(f"  Appium /status returned HTTP {response.status}")
             return False
         return True
-    except OSError as error:
+    except (OSError, http.client.HTTPException) as error:
         print(f"  Appium /status request failed: {error}")
         return False
     finally:
@@ -58,7 +58,7 @@ def check_robot_remote(host: str, port: int) -> bool:
             print("  Robot Remote Library returned no keywords")
             return False
         return True
-    except (OSError, xmlrpc.client.Error) as error:
+    except (OSError, http.client.HTTPException, xmlrpc.client.Error) as error:
         print(f"  Robot Remote Library call failed: {error}")
         return False
 
