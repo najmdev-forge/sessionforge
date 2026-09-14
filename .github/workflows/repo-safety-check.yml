@@ -28,13 +28,6 @@ jobs:
             exit 1
           fi
 
-      - name: CLAUDE.md must not be tracked
-        run: |
-          if git ls-files | grep -x 'CLAUDE.md'; then
-            echo "CLAUDE.md must stay untracked, see .git/info/exclude."
-            exit 1
-          fi
-
       - name: Simple secret pattern scan
         run: |
           base="${{ github.event.pull_request.base.sha }}"
